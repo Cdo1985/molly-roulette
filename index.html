@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Molly Roulette</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle, #1a1a2e 0%, #0f0c29 100%);
+            color: white; font-family: 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            min-height: 100vh; margin: 0; overflow-x: hidden;
+            touch-action: manipulation;
+        }
+
+        .jackpot-container {
+            background: rgba(0, 0, 0, 0.6); border: 2px solid #ffd700;
+            padding: 15px 30px; border-radius: 20px; margin: 20px 0;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.2); text-align: center;
+            width: 85%; max-width: 400px;
+        }
+
+        #pot-amount { font-size: 2.2rem; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px #ffd700; }
+
+        .wheel-box { 
+            position: relative; 
+            width: 90vw; height: 90vw; 
+            max-width: 450px; max-height: 450px;
+        }
+
+        .pointer {
+            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 40px; background: #fff; clip-path: polygon(50% 100%, 0 0, 100% 0);
+            z-index: 100; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.5));
+        }
+        
+        canvas { 
+            width: 100% !important; height: 100% !important; 
+            border-radius: 50%; border: 12px solid #333; 
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            transition: box-shadow 0.5s ease;
+        }
+
+        /* GLOW EFFECTS */
+        .flash-jackpot { animation: glow-gold 0.5s infinite alternate; }
+        .flash-bonus { animation: glow-blue 0.5s infinite alternate; }
+        @keyframes glow-gold { from { box-shadow: 0 0 20px #ffd700; } to { box-shadow: 0 0 70px #ffd700; } }
+        @keyframes glow-blue { from { box-shadow: 0 0 20px #00d2ff; } to { box-shadow: 0 0 70px #00d2ff; } }
+
+        .btn-group { margin: 25px 0; display: none; gap: 12px; flex-wrap: wrap; justify-content: center; }
+        
+        .spin-btn {
+            background: linear-gradient(135deg, #e94560 0%, #950740 100%);
+            color: white; border: none; padding: 14px 22px; border-radius: 12px;
+            font-weight: bold; cursor: pointer; transition: 0.3s; font-size: 0.9rem;
+            min-width: 110px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        #connect-wallet {
+            background: #ffd700; color: black; padding: 18px 45px;
+            border-radius: 50px; font-weight: bold; border: none; cursor: pointer;
+            margin: 20px; font-size: 1.1rem;
+        }
+
+        @media (max-width: 600px) {
+            .btn-group { flex-direction: column; width: 85%; }
+            .spin-btn { width: 100%; padding: 18px; }
+            #pot-amount { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="jackpot-container" id="pot-box">
+        <div style="letter-spacing: 2px; font-size: 0.8rem; opacity: 0.8; margin-bottom: 5px;">PRIZE POOL (BASE ETH)</div>
+        <div id="pot-amount">0.0000 ETH</div>
+    </div>
+
+    <button id="connect-wallet">CONNECT WALLET</button>
+
+    <div class="wheel-box">
+        <div class="pointer"></div>
+        <canvas id="wheel" width="800" height="800"></canvas>
+    </div>
+
+    <div class="btn-group" id="controls">
+        <button class="spin-btn" onclick="buySpins(1, '0.0005')">1 SPIN<br>0.0005</button>
+        <button class="spin-btn" onclick="buySpins(5, '0.002')">5 SPINS<br>0.002</button>
+        <button class="spin-btn" onclick="buySpins(10, '0.004')">10 SPINS<br>0.004</button>
+    </div>
+
+    <script>
+        const VAULT_ADDRESS = "0x76A2a72470090dCc0A0C16D60bF7f5cD3238Ef8b"; 
+        const BASE_ID = "0x2105"; // 8453 for Base Mainnet
+
+        const segments = [
+            { label: "Ketamine", color: "#615FFF", weight: 1.2 },
+            { label: "Rat Poison", color: "#FF8904", weight: 0.5 },
+            { label: "BONUS", color: "#00d2ff", weight: 0.4, isBonus: true },
+            { label: "Bath Salts", color: "#e74c3c", weight: 1.0 },
+            { label: "JACKPOT", color: "#ffd700", weight: 0.15, isJackpot: true },
+            { label: "Sugar/Starch", color: "#3498db", weight: 0.5 },
+            { label: "Meth", color: "#f39c12", weight: 0.5 },
+            { label: "JACKPOT", color: "#ffd700", weight: 0.15, isJackpot: true }
+        ];
+
+        let provider, signer, spinsQueued = 0, currentRotation = 0;
+        const canvas = document.getElementById('wheel');
+        const ctx = canvas.getContext('2d');
+        const totalWeight = segments.reduce((sum, s) => sum + s.weight, 0);
+
+        function draw() {
+            let angle = 0;
+            segments.forEach(s => {
+                const slice = (s.weight / totalWeight) * 2 * Math.PI;
+                ctx.beginPath(); ctx.fillStyle = s.color; ctx.moveTo(400, 400);
+                ctx.arc(400, 400, 380, angle, angle + slice); ctx.fill(); 
+                ctx.save(); ctx.translate(400, 400); ctx.rotate(angle + slice/2);
+                ctx.fillStyle = "white"; ctx.font = "bold 34px Arial"; ctx.textAlign = "right";
+                ctx.fillText(s.label, 360, 10); ctx.restore();
+                angle += slice;
+            });
+        }
+        draw();
+
+        async function updateLivePot() {
+            if (!provider) return;
+            try {
+                const balance = await provider.getBalance(VAULT_ADDRESS);
+                const ethVal = ethers.formatEther(balance);
+                document.getElementById('pot-amount').innerText = `${parseFloat(ethVal).toFixed(4)} ETH`;
+            } catch(e) { console.error("Balance fetch error", e); }
+        }
+
+        document.getElementById('connect-wallet').onclick = async () => {
+            if (window.ethereum) {
+                provider = new ethers.BrowserProvider(window.ethereum);
+                const chain = await window.ethereum.request({ method: 'eth_chainId' });
+                if (chain !== BASE_ID) {
+                    try {
+                        await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_ID }] });
+                    } catch (e) { alert("Please switch to Base Mainnet!"); return; }
+                }
+                await provider.send("eth_requestAccounts", []);
+                signer = await provider.getSigner();
+                document.getElementById('connect-wallet').style.display = 'none';
+                document.getElementById('controls').style.display = 'flex';
+                updateLivePot();
+                setInterval(updateLivePot, 8000);
+            } else { alert("Please install a web3 wallet!"); }
+        };
+
+        async function buySpins(count, amount) {
+            try {
+                const tx = await signer.sendTransaction({ to: VAULT_ADDRESS, value: ethers.parseEther(amount) });
+                canvas.className = ""; 
+                await tx.wait();
+                spinsQueued = count;
+                startSpin();
+            } catch(e) { alert("Transaction failed."); }
+        }
+
+        function startSpin() {
+            if (spinsQueued <= 0) return;
+            const extra = (12 * 360) + (Math.random() * 360); // 12 full spins + random offset
+            currentRotation += extra;
+            canvas.style.transition = "transform 4.5s cubic-bezier(0.15, 0, 0.15, 1)";
+            canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+            setTimeout(() => {
+                const normalized = (360 - (currentRotation % 360) + 270) % 360;
+                let cumulative = 0, winner = segments[0];
+                for (let s of segments) {
+                    let deg = (s.weight / totalWeight) * 360;
+                    if (normalized >= cumulative && normalized < cumulative + deg) { winner = s; break; }
+                    cumulative += deg;
+                }
+
+                if (winner.isJackpot) canvas.classList.add("flash-jackpot");
+                else if (winner.isBonus) { canvas.classList.add("flash-bonus"); spinsQueued++; }
+
+                setTimeout(() => {
+                    alert("RESULT: " + winner.label);
+                    spinsQueued--;
+                    if (spinsQueued > 0) { canvas.className = ""; setTimeout(startSpin, 1200); }
+                }, 500);
+            }, 4500);
+        }
+    </script>
+</body>
+</html>
