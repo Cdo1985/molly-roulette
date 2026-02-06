@@ -91,18 +91,18 @@
     </div>
 
     <script>
-        const VAULT_ADDRESS = "0x76A2a72470090dCc0A0C16D60bF7f5cD3238Ef8b"; 
+        const VAULT_ADDRESS = "0x3CFD81965E316714AFc621602ddB18929585A903"; 
         const BASE_ID = "0x2105"; // 8453 for Base Mainnet
 
         const segments = [
-            { label: "Ketamine", color: "#615FFF", weight: 1.2 },
+            { label: "Ketamine", color: "#615FFF", weight: 0.5 },
             { label: "Rat Poison", color: "#FF8904", weight: 0.5 },
-            { label: "BONUS", color: "#00d2ff", weight: 0.4, isBonus: true },
-            { label: "Bath Salts", color: "#e74c3c", weight: 1.0 },
-            { label: "JACKPOT", color: "#ffd700", weight: 0.15, isJackpot: true },
+            { label: "BONUS", color: "#00d2ff", weight: 1.2, isBonus: true },
+            { label: "Bath Salts", color: "#e74c3c", weight: 0.8 },
+            { label: "JACKPOT", color: "#ffd700", weight: 0.25, isJackpot: true },
             { label: "Sugar/Starch", color: "#3498db", weight: 0.5 },
             { label: "Meth", color: "#f39c12", weight: 0.5 },
-            { label: "JACKPOT", color: "#ffd700", weight: 0.15, isJackpot: true }
+            { label: "JACKPOT", color: "#ffd700", weight: 0.25, isJackpot: true }
         ];
 
         let provider, signer, spinsQueued = 0, currentRotation = 0;
@@ -189,4 +189,5 @@
         }
     </script>
 </body>
+
 </html>
